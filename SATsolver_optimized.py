@@ -54,51 +54,9 @@ def backtrack(decision_stack, decision_level, propagation_queue):
     propagation_queue.clear()
     return decision_level-1
 
-def has_unassigned_variables(assignments):
+def has_unassigned_variables(decision_stack, nbvars):
+    return len([var for level in decision_stack for var in level]) < nbvars
 
-    for i in assignments:
-        if i is None:
-            return True
-    return False
-
-def DPLL(sentence, nbvar, nbclauses):
-    variables = [i + 1 for i in range(nbvar)]
-
-    assignments = [None] * nbvar
-    decision_stack = []
-    propagation_queue = []
-    decision_level = 0
-
-    watchlist = create_watchlist(sentence, nbvar, nbclauses)
-
-    while has_unassigned_variables(assignments):  # not all variables have been assigned a value
-        x = pick_variable(assignments)
-        propagation_queue.append(-x)  # add -x to the list of variables that cannot be watched
-        decision_stack.append([x])
-
-        assignments[abs(x)-1] = x
-
-        decision_level += 1
-        # now propagate this decision
-        while propagate(sentence, assignments, decision_stack, propagation_queue, watchlist, nbclauses) == "CONFLICT":
-            if decision_level == 0:
-                return (False, None)
-            decision_level -= 1
-            propagation_queue.clear()
-            current = decision_stack[decision_level]
-            decision_stack.pop()
-            x = current[0]
-            for i in current:
-                assignments[abs(i)-1] = None
-
-            assignments[abs(x)-1] = -x
-            if decision_level > 0:
-                decision_stack[-1].append(-x)
-            else:
-                decision_stack.append([-x])
-            propagation_queue.append(x)
-
-    return (True, assignments)
 
 def eliminate_redundant_clauses(sentence):
 
@@ -151,10 +109,11 @@ def create_index(sentence, nbvar):
     return index
 
 # the method for deciding which variable we will try next
-def pick_variable(assignments):
-    for i, var in enumerate(assignments):
-        if var is None:
-            return i+1
+def pick_variable(assignments, nbvars):
+    for i in range(1, nbvars+1):
+        if i not in assignments and -i not in assignments:
+            return i
+    raise RuntimeError
 
 def create_watchlist(sentence, nbvar, nbclauses): # we assume every clause has at least 2 literals, otherwise it can be propagated already
     watchlist = [None] * nbclauses
@@ -163,15 +122,50 @@ def create_watchlist(sentence, nbvar, nbclauses): # we assume every clause has a
         watchlist[i].append(sentence[i][1])
     return watchlist
 
-def propagate(sentence, assignments, decision_stack, prop_queue, watchlist, nbclauses):
+def DPLL(sentence, nbvar, nbclauses):
 
-    inside_assignments = []
+    decision_stack = []
+    propagation_queue = []
+    decision_level = 0
+
+    watchlist = create_watchlist(sentence, nbvar, nbclauses)
+
+    while has_unassigned_variables(decision_stack, nbvar):  # not all variables have been assigned a value
+        x = pick_variable([var for level in decision_stack for var in level], nbvar)
+        propagation_queue.append(-x)  # add -x to the list of variables that cannot be watched
+        decision_stack.append([x])
+
+        decision_level += 1
+
+        while propagate(sentence, decision_stack, propagation_queue, watchlist, nbclauses) == "CONFLICT":
+            if decision_level == 0:
+                return (False, None)
+            decision_level -= 1
+            propagation_queue.clear()
+            current = decision_stack[decision_level]
+            decision_stack.pop()
+            x = current[0]
+
+            if decision_level > 0:
+                decision_stack[-1].append(-x)
+            else:
+                decision_stack.append([-x])
+                decision_level += 1
+            propagation_queue.append(x)
+    assignments = [var for level in decision_stack for var in level]
+    return (True, assignments)
+
+
+def propagate(sentence, decision_stack, prop_queue, watchlist, nbclauses):
+
+    assignments = [var for level in decision_stack for var in level]
     while prop_queue:
         x = prop_queue.pop()
         for i in range(nbclauses):
             for j in [0,1]:
                 if x == watchlist[i][j]:
                     y = watchlist[i][1-j]
+                    clause = sentence[i]
                     if y in assignments:
                         break
                     found_another = False
@@ -181,12 +175,10 @@ def propagate(sentence, assignments, decision_stack, prop_queue, watchlist, nbcl
                             found_another = True
                     if not found_another:
                         if -y in assignments:
-                            for k in inside_assignments:
-                                assignments[abs(k)-1] = None
                             return "CONFLICT"
                         else:
-                            assignments[abs(y)-1] = y
-                            inside_assignments.append(y)
+                            assignments.append(y)
+                            decision_stack[-1].append(y)
                             prop_queue.append(-y)
 
     return "DONE"
@@ -195,8 +187,9 @@ if __name__ == "__main__":
 
     time1 = time.time()
 
-    for i in range(100):
-        filename='.\\tests\\uf20-0' + str(i+1) + '.cnf'
+    for i in range(10):
+        filename='.\\tests\\CBS_k3_n100_m403_b10_' + str(i) + '.cnf'
+        #filename = '.\sudoku_hard.txt'
 
         file = open(filename, "r")
         lines = file.readlines()
@@ -211,7 +204,7 @@ if __name__ == "__main__":
         assignments = []
 
         if len(val) < nbvar:
-            sat , assignments = DPLL(sentence, nbvar, nbclauses)
+            sat, assignments = DPLL(sentence, nbvar, nbclauses)
             if not sat:
                 print("UNSAT")
                 continue
