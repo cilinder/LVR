@@ -4,6 +4,13 @@ import time
 import validate
 
 
+class Variable:
+    def __init__(self, name, val, watchlist):
+        self.name = name
+        self.val = val
+        self.watchlist = watchlist
+        self.assigned = False
+
 def display_sentence(sentence):
     print('[', end ="")
     firstSentence = True
@@ -54,8 +61,8 @@ def backtrack(decision_stack, decision_level, propagation_queue):
     propagation_queue.clear()
     return decision_level-1
 
-def has_unassigned_variables(decision_stack, nbvars):
-    return len([var for level in decision_stack for var in level]) < nbvars
+def has_unassigned_variables(assignments, nbvars):
+    return len(assignments) < nbvars
 
 
 def eliminate_redundant_clauses(sentence):
@@ -73,6 +80,7 @@ def eliminate_redundant_clauses(sentence):
 
 def parse_dimacs(lines):
     sentence = []
+    variables = []
 
     for line in lines:
         if line[0] == 'c':
@@ -81,17 +89,35 @@ def parse_dimacs(lines):
             nums = [int(s) for s in line.split() if s.isdigit()]
             nbvar = nums[0]
             nbclauses = nums[1]
+
+            variables = [None] * 2*nbvar
+
+            for i in range(nbvar):
+                variables[i] = (Variable(i+1, True, []))
+                variables[-i-1] = (Variable(-(i+1), False, []))
+
+
         elif line[0] == '%':
             break
         else:
             clause = []
             for t in line.split():
                 try:
-                    clause.append(int(t))
+                    t = int(t)
+                    if t == 0:
+                        continue
+                    val = t > 0 # if t > 0 then val = True, if t < 0 then val = False
+                    for var in variables:
+                        if var.name == t:
+                            clause.append(var)
                 except ValueError:
                     pass
-            sentence.append(clause[:-1])
-    return (sentence, nbvar, nbclauses)
+            sentence.append(clause)
+
+            clause[0].watchlist.append(clause)
+            if len(clause) >= 2:
+                clause[1].watchlist.append(clause)
+    return (sentence, variables, nbvar, nbclauses)
 
 
 def create_index(sentence, nbvar):
@@ -109,107 +135,175 @@ def create_index(sentence, nbvar):
     return index
 
 # the method for deciding which variable we will try next
-def pick_variable(assignments, nbvars):
-    for i in range(1, nbvars+1):
-        if i not in assignments and -i not in assignments:
-            return i
+def pick_variable(variables):
+    for var in variables:
+        n = -var.name
+        if n > 0:
+            n -= 1
+        if not var.assigned and not variables[n].assigned:
+            return var
     raise RuntimeError
 
 def create_watchlist(sentence, nbvar, nbclauses): # we assume every clause has at least 2 literals, otherwise it can be propagated already
-    watchlist = [None] * nbclauses
-    for i in range(nbclauses):
-        watchlist[i] = [sentence[i][0]]
-        watchlist[i].append(sentence[i][1])
+    watchlist = [None] * nbvar
+    for i in range(nbvar):
+        watchlist[i] = [None] * 2
+    for clause in sentence:
+        if len(clause) < 2:
+            raise RuntimeError
+        index1 = (abs(clause[0]) + 1) / 2
+        watchlist[abs(clause[0])][index1] = clause
+        index2 = (abs(clause[1]) + 1) / 2
+        watchlist[abs(clause[1])][index2] = clause
+
     return watchlist
 
-def DPLL(sentence, nbvar, nbclauses):
+def DPLL(sentence, variables, nbvar, nbclauses):
 
     decision_stack = []
     propagation_queue = []
+    assignments = []
     decision_level = 0
 
-    watchlist = create_watchlist(sentence, nbvar, nbclauses)
+    # first round of propagations, if there are already unit clauses
+    for clause in sentence:
+        if len(clause) == 1:
+            clause[0].assigned = True
+            assignments.append(clause[0])
+            n = -clause[0].name
+            if n > 0:
+                n -= 1
+            propagation_queue.append(variables[n])
+    decision_stack.append([var for var in assignments])
 
-    while has_unassigned_variables(decision_stack, nbvar):  # not all variables have been assigned a value
-        x = pick_variable([var for level in decision_stack for var in level], nbvar)
-        propagation_queue.append(-x)  # add -x to the list of variables that cannot be watched
+    if propagate(sentence, variables, decision_stack, assignments, propagation_queue, nbclauses) == "CONFLICT":
+        return "UNSAT"
+
+    decision_stack.pop()
+
+    while has_unassigned_variables(assignments, nbvar):  # not all variables have been assigned a value
+        x = pick_variable(variables)
+        n = -x.name
+        if n > 0:
+            n -= 1
+        x.assigned = True
+        propagation_queue.append(variables[n])  # add -x to the list of variables that cannot be watched
         decision_stack.append([x])
+        assignments.append(x)
 
         decision_level += 1
 
-        while propagate(sentence, decision_stack, propagation_queue, watchlist, nbclauses) == "CONFLICT":
+        while propagate(sentence, variables, decision_stack, assignments, propagation_queue, nbclauses) == "CONFLICT":
             if decision_level == 0:
                 return (False, None)
             decision_level -= 1
             propagation_queue.clear()
-            current = decision_stack[decision_level]
+            #current = decision_stack[decision_level]
+            current = decision_stack[-1]
+            for var in current:
+                var.assigned = False
+                assignments.remove(var)
             decision_stack.pop()
             x = current[0]
 
+            n = -x.name
+            if n > 0:
+                n -= 1
+            not_x = variables[n]
+            x.assigned = False
+            not_x.assigned = True
             if decision_level > 0:
-                decision_stack[-1].append(-x)
+                decision_stack[-1].append(not_x)
             else:
-                decision_stack.append([-x])
+                decision_stack.append([not_x])
                 decision_level += 1
+            assignments.append(not_x)
             propagation_queue.append(x)
-    assignments = [var for level in decision_stack for var in level]
     return (True, assignments)
 
 
-def propagate(sentence, decision_stack, prop_queue, watchlist, nbclauses):
+def propagate(sentence, variables, decision_stack, assignments, prop_queue, nbclauses):
 
-    assignments = [var for level in decision_stack for var in level]
     while prop_queue:
         x = prop_queue.pop()
-        for i in range(nbclauses):
-            for j in [0,1]:
-                if x == watchlist[i][j]:
-                    y = watchlist[i][1-j]
-                    clause = sentence[i]
-                    if y in assignments:
-                        break
-                    found_another = False
-                    for var in sentence[i]:
-                        if var != x and var != y and -var not in assignments:
-                            watchlist[i][j] = var
-                            found_another = True
-                    if not found_another:
-                        if -y in assignments:
-                            return "CONFLICT"
-                        else:
-                            assignments.append(y)
-                            decision_stack[-1].append(y)
-                            prop_queue.append(-y)
+        remove_list = []
+
+        # find all clauses watched by x
+        for watched_clause in x.watchlist:
+            x_slot = None
+            if len(watched_clause) == 1:
+                x_slot = 0
+                y = x
+            elif watched_clause[0] == x:
+                x_slot = 0
+                y = watched_clause[1]
+            else:
+                x_slot = 1
+                y = watched_clause[0]
+            if y in assignments:
+                continue
+            # check if there is a different literal in the clause we can watch
+            found_another = False
+            for i in range(2, len(watched_clause)):
+                var = watched_clause[i]
+                n = -var.name
+                if n > 0:
+                    n -= 1
+                other = variables[n]
+                if var.assigned == True or other.assigned == False:
+                    # other will be the new watched literal instead of x
+                    watched_clause[x_slot] = var
+                    watched_clause[i] = x
+                    remove_list.append(watched_clause)
+                    #x.watchlist.remove(watched_clause)
+                    var.watchlist.append(watched_clause)
+                    found_another = True
+                    break
+            if not found_another:
+                n = -y.name
+                if n > 0:
+                    n -= 1
+                if variables[n].assigned:
+                    return "CONFLICT"
+                else:
+                    y.assigned = True
+                    decision_stack[-1].append(y)
+                    assignments.append(y)
+                    prop_queue.append(variables[n])
+
+        for clause in remove_list:
+            x.watchlist.remove(clause)
 
     return "DONE"
+
 
 if __name__ == "__main__":
 
     time1 = time.time()
 
-    for i in range(10):
-        filename='.\\tests\\CBS_k3_n100_m403_b10_' + str(i) + '.cnf'
-        #filename = '.\sudoku_hard.txt'
+    for i in range(1):
+        filename='.\\tests\\uf20-0' + str(8+1) + '.cnf'
+        #filename = 'sudoku_hard.txt'
 
         file = open(filename, "r")
         lines = file.readlines()
 
-        sentence, nbvar, nbclauses = parse_dimacs(lines)
+        sentence, variables, nbvar, nbclauses = parse_dimacs(lines)
         sentence.sort(key=len)
-        sentence = eliminate_redundant_clauses(sentence)
-        sentence, val = find_units_and_simplify(sentence, [])
 
         nbclauses = len(sentence)
 
         assignments = []
 
-        if len(val) < nbvar:
-            sat, assignments = DPLL(sentence, nbvar, nbclauses)
-            if not sat:
-                print("UNSAT")
-                continue
+        sat, assignments = DPLL(sentence, variables, nbvar, nbclauses)
+        val = [var.name for var in assignments]
+        if not sat:
+            print("UNSAT")
+            continue
 
-        validate.validate(sentence, assignments + val)
+        validation_sentence = [[var.name for var in clause] for clause in sentence]
+
+        validate.validate(validation_sentence, val)
 
     time2 = time.time()
     print('the function took {:.3f} s'.format((time2 - time1)))
