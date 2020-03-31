@@ -16,7 +16,9 @@ Example calls:
 `python SATsolver.py my_cnf.txt solution.txt`
 
 ## Tests
-The testfile is a uniform-random 3-SAT instance with 150 variables, taken from:
+The testfile is a uniform-random 3-SAT instance with 150 variables
+
+Taken from:
 https://www.cs.ubc.ca/~hoos/SATLIB/benchm.html
 
 ## Optimization attempt
