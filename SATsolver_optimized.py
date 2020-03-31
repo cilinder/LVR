@@ -180,7 +180,6 @@ def DPLL(sentence, variables, nbvar, nbclauses):
         return "UNSAT"
 
     decision_stack.pop()
-    tried_all = False
 
     while has_unassigned_variables(assignments, nbvar):  # not all variables have been assigned a value
         x = pick_variable(variables)
@@ -193,9 +192,6 @@ def DPLL(sentence, variables, nbvar, nbclauses):
         assignments.append(x)
 
         decision_level += 1
-
-        # if len(decision_stack) >= 3 and decision_stack[0][0].name == -1 and decision_stack[1][0].name == 2:
-        #     print("hi")
 
         while propagate(sentence, variables, decision_stack, assignments, propagation_queue, nbclauses) == "CONFLICT":
             if decision_level == 0:
@@ -217,8 +213,6 @@ def DPLL(sentence, variables, nbvar, nbclauses):
             not_x = variables[n]
             x.assigned = False
             not_x.assigned = True
-            # if (not_x.name == -1):
-            #     print("hi")
             if decision_level > 0:
                 decision_stack[-1].append(not_x)
             else:
