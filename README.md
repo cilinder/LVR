@@ -15,6 +15,10 @@ Example calls:
 + CNF formula is stored in '*my_cnf.txt*', solution should be written to '*solution.txt*':
 `python SATsolver.py my_cnf.txt solution.txt`
 
+## Tests
+The testfile is a uniform-random 3-SAT instance with 150 variables, taken from:
+https://www.cs.ubc.ca/~hoos/SATLIB/benchm.html
+
 ## Optimization attempt
 In the SATsolver_optimized.py file (everything works the same as the basic version)
 
