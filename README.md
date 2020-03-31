@@ -10,9 +10,9 @@ Solution can be printed to STDOUT (default) or written to file.
 
 Example calls:
 + CNF formula is stored in file '*my_cnf.txt*':
-`python SAT_solver.py my_cnf.txt`
+`python SATsolver.py my_cnf.txt`
 
 + CNF formula is stored in '*my_cnf.txt*', solution should be written to '*solution.txt*':
-`python SAT_solver.py my_cnf.txt solution.txt`
+`python SATsolver.py my_cnf.txt solution.txt`
 
 ## Optimization attempt
