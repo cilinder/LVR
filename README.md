@@ -15,6 +15,8 @@ Example calls:
 + CNF formula is stored in '*my_cnf.txt*', solution should be written to '*solution.txt*':
 `python SATsolver.py my_cnf.txt solution.txt`
 
+For checking the correctness of the formula given by the solver, there is a function: validate(sentence, solution) in the file validate.py
+
 ## Tests
 The testfile is a uniform-random 3-SAT instance with 150 variables
 
