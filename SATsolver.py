@@ -107,34 +107,28 @@ def parse_dimacs(lines):
 
 if __name__ == "__main__":
 
-    time1 = time.time()
+    filename=sys.argv[1]
+    file = open(filename, "r")
+    lines = file.readlines()
 
-    for i in range(1):
-        filename='.\\tests\\CBS_k3_n100_m403_b10_' + str(i+1) + '.cnf'
+    sentence = parse_dimacs(lines)
+    sentence.sort(key=len)
+    file.close()
 
-        file = open(filename, "r")
-        lines = file.readlines()
+    sentence = eliminate_redundant_clauses(sentence)
 
-        sentence = parse_dimacs(lines)
-        sentence.sort(key=len)
-
-        sentence = eliminate_redundant_clauses(sentence)
-
-        success, val = DPLL(sentence, [])
-        #outputfilename = sys.argv[2]
-        #outputfile = open(outputfilename, "w")
-        if success:
-            continue
-            #print('SAT')
-            #for value in val:
-                #outputfile.write("%i " % value)
-        else:
-            print('NOSAT')
-            #outputfile.write('0')
-
-        #outputfile.close()
-
+    success, val = DPLL(sentence, [])
+    if len(sys.argv) >= 3:
+        outputfilename = sys.argv[2]
+        outputfile = open(outputfilename, "w")
+    else:
+        outputfile = sys.stdout
+    if success:
         #validate.validate(sentence, val)
+        for x in val:
+            print(x, file=outputfile, end=" ")
+    else:
+        print('NOSAT')
+        outputfile.write('0')
 
-    time2 = time.time()
-    print('the function took {:.3f} s'.format((time2 - time1)))
+    outputfile.close()

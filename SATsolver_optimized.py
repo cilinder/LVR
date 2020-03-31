@@ -180,6 +180,7 @@ def DPLL(sentence, variables, nbvar, nbclauses):
         return "UNSAT"
 
     decision_stack.pop()
+    tried_all = False
 
     while has_unassigned_variables(assignments, nbvar):  # not all variables have been assigned a value
         x = pick_variable(variables)
@@ -193,6 +194,9 @@ def DPLL(sentence, variables, nbvar, nbclauses):
 
         decision_level += 1
 
+        # if len(decision_stack) >= 3 and decision_stack[0][0].name == -1 and decision_stack[1][0].name == 2:
+        #     print("hi")
+
         while propagate(sentence, variables, decision_stack, assignments, propagation_queue, nbclauses) == "CONFLICT":
             if decision_level == 0:
                 return (False, None)
@@ -200,11 +204,12 @@ def DPLL(sentence, variables, nbvar, nbclauses):
             propagation_queue.clear()
             #current = decision_stack[decision_level]
             current = decision_stack[-1]
+            x = current[0]
+
             for var in current:
                 var.assigned = False
                 assignments.remove(var)
             decision_stack.pop()
-            x = current[0]
 
             n = -x.name
             if n > 0:
@@ -212,6 +217,8 @@ def DPLL(sentence, variables, nbvar, nbclauses):
             not_x = variables[n]
             x.assigned = False
             not_x.assigned = True
+            # if (not_x.name == -1):
+            #     print("hi")
             if decision_level > 0:
                 decision_stack[-1].append(not_x)
             else:
@@ -251,12 +258,13 @@ def propagate(sentence, variables, decision_stack, assignments, prop_queue, nbcl
                     n -= 1
                 other = variables[n]
                 if var.assigned == True or other.assigned == False:
-                    # other will be the new watched literal instead of x
+                    # var will be the new watched literal instead of x
                     watched_clause[x_slot] = var
                     watched_clause[i] = x
                     remove_list.append(watched_clause)
                     #x.watchlist.remove(watched_clause)
-                    var.watchlist.append(watched_clause)
+                    if watched_clause not in var.watchlist:
+                        var.watchlist.append(watched_clause)
                     found_another = True
                     break
             if not found_another:
@@ -264,6 +272,8 @@ def propagate(sentence, variables, decision_stack, assignments, prop_queue, nbcl
                 if n > 0:
                     n -= 1
                 if variables[n].assigned:
+                    for clause in remove_list:
+                        x.watchlist.remove(clause)
                     return "CONFLICT"
                 else:
                     y.assigned = True
@@ -279,31 +289,30 @@ def propagate(sentence, variables, decision_stack, assignments, prop_queue, nbcl
 
 if __name__ == "__main__":
 
-    time1 = time.time()
+    filename=sys.argv[1]
+    file = open(filename, "r")
+    lines = file.readlines()
 
-    for i in range(1):
-        filename='.\\tests\\uf20-0' + str(8+1) + '.cnf'
-        #filename = 'sudoku_hard.txt'
+    sentence, variables, nbvar, nbclauses = parse_dimacs(lines)
+    sentence.sort(key=len)
+    file.close()
 
-        file = open(filename, "r")
-        lines = file.readlines()
+    nbclauses = len(sentence)
 
-        sentence, variables, nbvar, nbclauses = parse_dimacs(lines)
-        sentence.sort(key=len)
+    assignments = []
 
-        nbclauses = len(sentence)
-
-        assignments = []
-
-        sat, assignments = DPLL(sentence, variables, nbvar, nbclauses)
+    sat, assignments = DPLL(sentence, variables, nbvar, nbclauses)
+    if len(sys.argv) >= 3:
+        outputfilename = sys.argv[2]
+        outputfile = open(outputfilename, "w")
+    else:
+        outputfile = sys.stdout
+    if sat:
         val = [var.name for var in assignments]
-        if not sat:
-            print("UNSAT")
-            continue
+        for x in val:
+            print(x, file=outputfile, end=" ")
+    if not sat:
+        print('UNSAT')
+        outputfile.write('0')
 
-        validation_sentence = [[var.name for var in clause] for clause in sentence]
-
-        validate.validate(validation_sentence, val)
-
-    time2 = time.time()
-    print('the function took {:.3f} s'.format((time2 - time1)))
+    outputfile.close()
